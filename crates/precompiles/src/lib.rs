@@ -11,6 +11,7 @@ pub(crate) mod ip_validation;
 
 pub mod account_keychain;
 pub mod address_registry;
+pub mod current_committee;
 pub mod nonce;
 pub mod receive_policy_guard;
 pub mod signature_verifier;
@@ -27,7 +28,8 @@ pub mod validator_config_v2;
 pub mod test_util;
 
 use crate::{
-    account_keychain::AccountKeychain, address_registry::AddressRegistry, nonce::NonceManager,
+    account_keychain::AccountKeychain, address_registry::AddressRegistry,
+    current_committee::CurrentCommittee, nonce::NonceManager,
     receive_policy_guard::ReceivePolicyGuard, signature_verifier::SignatureVerifier,
     stablecoin_dex::StablecoinDEX, storage::StorageCtx, tip_fee_manager::TipFeeManager,
     tip20::TIP20Token, tip20_channel_reserve::TIP20ChannelReserve, tip20_factory::TIP20Factory,
@@ -53,8 +55,8 @@ use revm::{
 };
 
 pub use tempo_contracts::precompiles::{
-    ACCOUNT_KEYCHAIN_ADDRESS, ADDRESS_REGISTRY_ADDRESS, DEFAULT_FEE_TOKEN,
-    NONCE_PRECOMPILE_ADDRESS, PATH_USD_ADDRESS, RECEIVE_POLICY_GUARD_ADDRESS,
+    ACCOUNT_KEYCHAIN_ADDRESS, ADDRESS_REGISTRY_ADDRESS, CURRENT_COMMITTEE_ADDRESS,
+    DEFAULT_FEE_TOKEN, NONCE_PRECOMPILE_ADDRESS, PATH_USD_ADDRESS, RECEIVE_POLICY_GUARD_ADDRESS,
     SIGNATURE_VERIFIER_ADDRESS, STABLECOIN_DEX_ADDRESS, TIP_FEE_MANAGER_ADDRESS,
     TIP20_CHANNEL_RESERVE_ADDRESS, TIP20_FACTORY_ADDRESS, TIP403_REGISTRY_ADDRESS,
     VALIDATOR_CONFIG_ADDRESS, VALIDATOR_CONFIG_V2_ADDRESS,
@@ -146,6 +148,8 @@ pub fn extend_tempo_precompiles(precompiles: &mut PrecompilesMap, cfg: &CfgEnv<T
             Some(SignatureVerifier::create_precompile(&cfg))
         } else if *address == RECEIVE_POLICY_GUARD_ADDRESS && cfg.spec.is_t6() {
             Some(ReceivePolicyGuard::create_precompile(&cfg))
+        } else if *address == CURRENT_COMMITTEE_ADDRESS && cfg.spec.is_t6() {
+            Some(CurrentCommittee::create_precompile(&cfg))
         } else {
             None
         }
@@ -255,6 +259,13 @@ impl ValidatorConfigV2 {
     /// Creates the EVM precompile for this type.
     pub fn create_precompile(cfg: &CfgEnv<TempoHardfork>) -> DynPrecompile {
         tempo_precompile!("ValidatorConfigV2", cfg, |input| { Self::new() })
+    }
+}
+
+impl CurrentCommittee {
+    /// Creates the EVM precompile for this type.
+    pub fn create_precompile(cfg: &CfgEnv<TempoHardfork>) -> DynPrecompile {
+        tempo_precompile!("CurrentCommittee", cfg, |input| { Self::new() })
     }
 }
 
