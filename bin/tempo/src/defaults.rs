@@ -213,6 +213,8 @@ fn init_engine_defaults() {
         .with_suppress_persistence_during_build(true)
         .with_share_sparse_trie_with_payload_builder(true)
         .with_share_execution_cache_with_payload_builder(true)
+        // This prototype branch measures Lthash without the MPT state-root validation path.
+        .with_skip_state_root(true)
         .try_init()
         .expect("failed to initialize engine defaults");
 }
