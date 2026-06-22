@@ -5,10 +5,12 @@
 
 use std::{net::SocketAddr, time::Duration};
 
-use super::dkg::common::{
-    assert_no_dkg_failures, wait_for_outcome, wait_for_validators_to_reach_epoch,
+use super::dkg::common::{wait_for_outcome, wait_for_validators_to_reach_epoch};
+use crate::{
+    Setup,
+    metrics::{MetricsExt, wait_for_height},
+    setup_validators,
 };
-use crate::{CONSENSUS_NODE_PREFIX, Setup, setup_validators};
 use alloy::transports::http::reqwest::Url;
 use alloy_primitives::hex;
 use commonware_codec::ReadExt as _;
@@ -19,15 +21,18 @@ use commonware_cryptography::{
 };
 use commonware_macros::test_traced;
 use commonware_runtime::{
-    Clock, Metrics as _, Runner as _,
-    deterministic::{self, Context, Runner},
+    Runner as _,
+    deterministic::{self, Runner},
 };
 use futures::{channel::oneshot, future::join_all};
 use jsonrpsee::{http_client::HttpClientBuilder, ws_client::WsClientBuilder};
 use tempo_consensus::consensus::Digest;
 use tempo_node::rpc::consensus::{Event, Query, TempoConsensusApiClient};
 
+/// Test that subscribing to consensus events works and that finalization
+/// can be queried via HTTP after receiving a finalization event.
 #[tokio::test]
+#[test_traced]
 async fn consensus_subscribe_and_query_finalization() {
     let _ = tempo_eyre::install();
 
@@ -43,7 +48,7 @@ async fn consensus_subscribe_and_query_finalization() {
         executor.start(|mut context| async move {
             let (mut validators, _execution_runtime) = setup_validators(&mut context, setup).await;
             validators[0].start(&context).await;
-            wait_for_height(&context, initial_height).await;
+            wait_for_height(&context, &validators[0], initial_height).await;
 
             let execution = validators[0].execution();
 
@@ -59,11 +64,11 @@ async fn consensus_subscribe_and_query_finalization() {
     });
 
     let (http_addr, ws_addr) = addr_rx.await.unwrap();
-
     let ws_url = format!("ws://{ws_addr}");
-    let ws_client = WsClientBuilder::default().build(&ws_url).await.unwrap();
-
     let http_url = format!("http://{http_addr}");
+    let ws_client = WsClientBuilder::default().build(&ws_url).await.unwrap();
+    let mut subscription = ws_client.subscribe_events().await.unwrap();
+
     let http_client = HttpClientBuilder::default().build(&http_url).unwrap();
 
     let mut saw_notarized = false;
@@ -71,7 +76,6 @@ async fn consensus_subscribe_and_query_finalization() {
     let mut notarized_height = initial_height;
     let mut finalized_height = initial_height;
 
-    let mut subscription = ws_client.subscribe_events().await.unwrap();
     while !saw_notarized || !saw_finalized {
         let event = tokio::time::timeout(Duration::from_secs(10), subscription.next())
             .await
@@ -80,7 +84,6 @@ async fn consensus_subscribe_and_query_finalization() {
             .unwrap();
 
         match event {
-            Event::Nullified { .. } => {}
             Event::Notarized { block, .. } => {
                 let height = block.block.inner.number;
                 assert!(height > notarized_height);
@@ -102,38 +105,18 @@ async fn consensus_subscribe_and_query_finalization() {
                 finalized_height = height;
                 saw_finalized = true;
             }
+            Event::Nullified { .. } => {}
         }
     }
 
     let _ = http_client.get_finalization(Query::Latest).await.unwrap();
 
     let state = http_client.get_latest().await.unwrap();
+
     assert!(state.finalized.is_some());
 
     drop(done_tx);
     executor_handle.join().unwrap();
-}
-
-/// Wait for a validator to reach a target height by checking metrics.
-async fn wait_for_height(context: &Context, target_height: u64) {
-    loop {
-        let metrics = context.encode();
-        for line in metrics.lines() {
-            if !line.starts_with(CONSENSUS_NODE_PREFIX) {
-                continue;
-            }
-            let mut parts = line.split_whitespace();
-            let metric = crate::metric_name(parts.next().unwrap());
-            let value = parts.next().unwrap();
-            if metric.ends_with("_marshal_processed_height") {
-                let height = value.parse::<u64>().unwrap();
-                if height >= target_height {
-                    return;
-                }
-            }
-        }
-        context.sleep(Duration::from_millis(100)).await;
-    }
 }
 
 /// Test that `get_identity_transition_proof` returns valid proofs after two full DKG ceremonies.
@@ -197,7 +180,7 @@ fn get_identity_transition_proof_after_full_dkg() {
         // Wait for full DKG to complete
         wait_for_validators_to_reach_epoch(&context, first_full_dkg_epoch + 1, how_many_signers)
             .await;
-        assert_no_dkg_failures(&context);
+        context.to_metrics().assert_no_dkg_failures();
 
         let outcome_after_first =
             wait_for_outcome(&context, &validators, first_full_dkg_epoch, epoch_length).await;
@@ -228,7 +211,7 @@ fn get_identity_transition_proof_after_full_dkg() {
 
         wait_for_validators_to_reach_epoch(&context, second_full_dkg_epoch + 1, how_many_signers)
             .await;
-        assert_no_dkg_failures(&context);
+        context.to_metrics().assert_no_dkg_failures();
 
         let outcome_after_second =
             wait_for_outcome(&context, &validators, second_full_dkg_epoch, epoch_length).await;

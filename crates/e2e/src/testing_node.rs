@@ -155,6 +155,15 @@ where
         &self.uid
     }
 
+    /// Get the metric prefix used by the most recently started instance.
+    ///
+    /// # Panics
+    /// Panics if the node was never started.
+    pub fn metric_prefix(&self) -> String {
+        assert!(self.n_starts > 0, "node has never been started");
+        format!("{}_{}", self.uid, self.n_starts - 1)
+    }
+
     /// Get a reference to the consensus config.
     pub fn consensus_config(
         &self,
@@ -314,12 +323,9 @@ where
         let engine = self
             .consensus_config
             .clone()
-            .try_init(
-                context
-                    .child("consensus")
-                    .with_attribute("uid", &self.uid)
-                    .with_attribute("start", self.n_starts),
-            )
+            .try_init(context.child(Box::leak(
+                format!("{}_{}", self.uid, self.n_starts).into_boxed_str(),
+            )))
             .await
             .expect("must be able to start the engine");
 
