@@ -6,7 +6,7 @@ use reth_ethereum::node::core::args::{
     DefaultDiscoveryArgs, DefaultEngineValues, DefaultNetworkArgs, DefaultPayloadBuilderValues,
     DefaultTraceValues, DefaultTxPoolValues,
 };
-use std::{borrow::Cow, str::FromStr, time::Duration};
+use std::{borrow::Cow, str::FromStr, sync::Once, time::Duration};
 use tempo_chainspec::spec::TEMPO_T7_BASE_FEE_FLOOR;
 use url::Url;
 
@@ -213,8 +213,6 @@ fn init_engine_defaults() {
         .with_suppress_persistence_during_build(true)
         .with_share_sparse_trie_with_payload_builder(true)
         .with_share_execution_cache_with_payload_builder(true)
-        // This prototype branch measures Lthash without the MPT state-root validation path.
-        .with_skip_state_root(true)
         .try_init()
         .expect("failed to initialize engine defaults");
 }
@@ -261,12 +259,15 @@ fn init_discovery_defaults() {
 }
 
 pub(crate) fn init_defaults() {
-    init_download_urls();
-    init_payload_builder_defaults();
-    init_txpool_defaults();
-    init_engine_defaults();
-    init_trace_defaults();
-    init_otlp_defaults();
-    init_network_defaults();
-    init_discovery_defaults();
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        init_download_urls();
+        init_payload_builder_defaults();
+        init_txpool_defaults();
+        init_engine_defaults();
+        init_trace_defaults();
+        init_otlp_defaults();
+        init_network_defaults();
+        init_discovery_defaults();
+    });
 }

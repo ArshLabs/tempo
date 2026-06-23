@@ -117,6 +117,8 @@ pub struct TempoPayloadBuilder<Provider> {
     enable_prewarming: bool,
     /// Whether to include block access lists in built execution payloads.
     enable_bal: bool,
+    /// Whether to skip MPT state-root computation during payload finalization.
+    skip_state_root: bool,
     /// Learned estimate of total replayable build work divided by work at tx cutoff.
     ///
     /// This lets the builder reserve time for non-interruptible
@@ -133,6 +135,8 @@ pub struct TempoPayloadBuilderConfig {
     pub state_provider_metrics: bool,
     /// Whether to enable prewarming of best transactions.
     pub enable_prewarming: bool,
+    /// Whether to skip MPT state-root computation during payload finalization.
+    pub skip_state_root: bool,
     /// Initial estimate of total replayable build work divided by work at tx cutoff.
     ///
     /// `1.0` means no finish-work headroom beyond observed work so far. Values
@@ -147,6 +151,7 @@ impl Default for TempoPayloadBuilderConfig {
             is_dev: false,
             state_provider_metrics: false,
             enable_prewarming: true,
+            skip_state_root: false,
             build_time_multiplier: DEFAULT_BUILD_TIME_MULTIPLIER,
         }
     }
@@ -172,6 +177,7 @@ impl<Provider> TempoPayloadBuilder<Provider> {
             state_provider_metrics: config.state_provider_metrics,
             enable_prewarming: config.enable_prewarming,
             enable_bal: cfg!(feature = "bal"),
+            skip_state_root: config.skip_state_root,
             build_time_multiplier: Arc::new(AtomicU64::new(scaled_build_time_multiplier(
                 config.build_time_multiplier,
             ))),
@@ -317,7 +323,7 @@ where
         let BuildArguments {
             cached_reads,
             execution_cache,
-            mut trie_handle,
+            trie_handle,
             config,
             cancel,
             best_payload,
@@ -329,6 +335,8 @@ where
             payload_id,
             ..
         } = config;
+        let skip_state_root = self.skip_state_root;
+        let mut trie_handle = if skip_state_root { None } else { trie_handle };
         let build_once_with_shared_trie =
             // When trie handle is provided, we build the payload once so the shared trie can be reused.
             trie_handle.is_some()
@@ -930,7 +938,7 @@ where
         };
 
         let (state_root_outcome, sparse_trie_state_root_wait_elapsed) =
-            if let Some(mut handle) = trie_handle {
+            if !skip_state_root && let Some(mut handle) = trie_handle {
                 let state_root_wait_start = Instant::now();
                 let _span = debug_span!(target: "payload_builder", "await_state_root").entered();
                 match handle.state_root() {
@@ -969,7 +977,15 @@ where
             (None, None)
         };
 
-        let (state_root, trie_updates) = if let Some(outcome) = state_root_outcome {
+        let (state_root, trie_updates) = if skip_state_root {
+            debug!(
+                target: "payload_builder",
+                id = %payload_id,
+                state_root = ?parent_header.state_root(),
+                "skipping payload state-root computation"
+            );
+            (parent_header.state_root(), Arc::new(Default::default()))
+        } else if let Some(outcome) = state_root_outcome {
             (outcome.state_root, outcome.trie_updates)
         } else {
             let (state_root, trie_updates) = finish_provider

@@ -80,13 +80,17 @@ use tokio::sync::oneshot;
 use tracing::{debug, info, info_span, warn, warn_span};
 
 fn apply_tempo_cli_overrides(cli: &mut TempoCli) {
-    if let Commands::Node(node_cmd) = &mut cli.command
-        && node_cmd
+    if let Commands::Node(node_cmd) = &mut cli.command {
+        // Tempo currently treats trie state-root computation as disabled for the Lthash prototype.
+        node_cmd.debug.skip_state_root = true;
+
+        if node_cmd
             .ext
             .node_args
             .engine_disable_execution_cache_sharing_with_builder
-    {
-        node_cmd.engine.share_execution_cache_with_payload_builder = false;
+        {
+            node_cmd.engine.share_execution_cache_with_payload_builder = false;
+        }
     }
 }
 
@@ -585,7 +589,7 @@ pub fn tempo_main_with(mut overrides: TempoOverrides) -> eyre::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Once, time::Duration};
+    use std::time::Duration;
 
     use clap::{CommandFactory, FromArgMatches, Parser};
 
@@ -594,12 +598,8 @@ mod tests {
     };
     use reth_ethereum::cli::Commands;
 
-    fn init_defaults_once() {
-        static INIT: Once = Once::new();
-        INIT.call_once(defaults::init_defaults);
-    }
-
     fn parse_follow(args: &[&str]) -> Option<FollowMode> {
+        defaults::init_defaults();
         let cli = TempoCli::try_parse_from(args).unwrap();
         let Commands::Node(node_cmd) = cli.command else {
             panic!("expected node command");
@@ -609,7 +609,7 @@ mod tests {
 
     #[test]
     fn wrapped_download_matches_parse_for_tracing() {
-        init_defaults_once();
+        defaults::init_defaults();
 
         let matches = TempoCli::command()
             .mut_subcommand("download", |_| snapshot_download::Args::command())
@@ -634,7 +634,7 @@ mod tests {
 
     #[test]
     fn follow_arg_parses_to_expected_mode() {
-        init_defaults_once();
+        defaults::init_defaults();
 
         assert_eq!(parse_follow(&["tempo", "node", "--dev"]), None);
         // `--follow` without a value falls back to the `auto` default.
@@ -654,7 +654,7 @@ mod tests {
 
     #[test]
     fn follow_certification_defaults() {
-        init_defaults_once();
+        defaults::init_defaults();
 
         let cli = TempoCli::try_parse_from(["tempo", "node", "--follow"]).unwrap();
         let Commands::Node(node_cmd) = cli.command else {
@@ -667,7 +667,7 @@ mod tests {
 
     #[test]
     fn follow_certification_disable() {
-        init_defaults_once();
+        defaults::init_defaults();
 
         let cli =
             TempoCli::try_parse_from(["tempo", "node", "--follow", "--follow.nocertify"]).unwrap();
@@ -682,7 +682,7 @@ mod tests {
 
     #[test]
     fn deprecated_follow_certification_flag_is_noop() {
-        init_defaults_once();
+        defaults::init_defaults();
 
         let cli = TempoCli::try_parse_from([
             "tempo",
@@ -702,7 +702,7 @@ mod tests {
 
     #[test]
     fn consensus_block_budget_defaults_are_stable() {
-        init_defaults_once();
+        defaults::init_defaults();
 
         let cli = TempoCli::try_parse_from(["tempo", "node", "--dev"]).unwrap();
         let Commands::Node(node_cmd) = cli.command else {
@@ -749,6 +749,7 @@ mod tests {
                 .node_args
                 .engine_disable_execution_cache_sharing_with_builder
         );
+        assert!(node_cmd.debug.skip_state_root);
         assert!(!node_cmd.engine.share_execution_cache_with_payload_builder);
 
         let cli = TempoCli::try_parse_from([

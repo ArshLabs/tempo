@@ -39,7 +39,7 @@ static PAYLOAD_BUILDER_TEST_LOCK: Mutex<()> = Mutex::new(());
 #[test_traced]
 fn shared_sparse_trie_single_validator_bypasses_sync_state_root() {
     let _guard = payload_builder_test_lock();
-    let deltas = run_payload_builder_test(&[true], 10);
+    let deltas = run_payload_builder_test(&[true], &[false], 10);
 
     assert!(
         deltas.finalization_count > 0,
@@ -61,9 +61,33 @@ fn shared_sparse_trie_single_validator_bypasses_sync_state_root() {
 }
 
 #[test_traced]
+fn skip_state_root_single_validator_bypasses_payload_state_root() {
+    let _guard = payload_builder_test_lock();
+    let deltas = run_payload_builder_test(&[true], &[true], 10);
+
+    assert!(
+        deltas.finalization_count > 0,
+        "expected payload builder finalization metrics to increase"
+    );
+    assert!(
+        deltas.builder_finish_count > 0,
+        "expected payload builder finish metrics to increase"
+    );
+    assert_eq!(
+        deltas.sparse_trie_state_root_wait_count, 0,
+        "expected skip-state-root mode to avoid sparse trie state-root waits"
+    );
+    assert_eq!(
+        deltas.state_root_count, 0,
+        "expected skip-state-root mode to avoid sync state-root work"
+    );
+    assert_pool_inclusion_metrics(&deltas);
+}
+
+#[test_traced]
 fn mixed_validators_build_blocks_with_and_without_shared_sparse_trie_payload_builder() {
     let _guard = payload_builder_test_lock();
-    let deltas = run_payload_builder_test(&[true, false], 10);
+    let deltas = run_payload_builder_test(&[true, false], &[false, false], 10);
 
     assert_pool_inclusion_metrics(&deltas);
     assert_eq!(
@@ -80,8 +104,15 @@ fn payload_builder_test_lock() -> MutexGuard<'static, ()> {
 
 fn run_payload_builder_test(
     share_sparse_trie_with_payload_builder: &[bool],
+    skip_state_root: &[bool],
     target_height: u64,
 ) -> MetricDelta {
+    assert_eq!(
+        share_sparse_trie_with_payload_builder.len(),
+        skip_state_root.len(),
+        "test config arrays must describe the same validators"
+    );
+
     let _ = tempo_eyre::install();
     let metrics_recorder = install_prometheus_recorder();
     let initial_finalization_count =
@@ -108,11 +139,13 @@ fn run_payload_builder_test(
                 .epoch_length(100);
             let (mut nodes, _execution_runtime) = setup_validators(&mut context, setup).await;
 
-            for (node, share_sparse_trie) in nodes
+            for ((node, share_sparse_trie), skip_state_root) in nodes
                 .iter_mut()
                 .zip(share_sparse_trie_with_payload_builder.iter().copied())
+                .zip(skip_state_root.iter().copied())
             {
                 node.execution_config.share_sparse_trie_with_payload_builder = share_sparse_trie;
+                node.execution_config.skip_state_root = skip_state_root;
             }
 
             join_all(nodes.iter_mut().map(|node| node.start(&context))).await;

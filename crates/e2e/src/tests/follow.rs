@@ -122,6 +122,7 @@ impl FollowerBuilder {
             secret_key: alloy_primitives::B256::random(),
             validator_key: None,
             feed_state: Some(feed_state.clone()),
+            skip_state_root: false,
             share_sparse_trie_with_payload_builder: false,
         };
 

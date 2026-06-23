@@ -143,6 +143,8 @@ mod tests {
 
     #[test]
     fn args_parses_mixed_reth_and_tempo_flags() {
+        crate::defaults::init_defaults();
+
         // Order interleaves tempo + reth flags to exercise both schemas in
         // the same parse pass.
         let args = Args::try_parse_from([
@@ -163,6 +165,8 @@ mod tests {
 
     #[test]
     fn args_accepts_explicit_skip_consensus_false() {
+        crate::defaults::init_defaults();
+
         let args = Args::try_parse_from([
             "tempo",
             "--manifest-url",

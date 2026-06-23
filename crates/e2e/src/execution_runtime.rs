@@ -235,6 +235,8 @@ pub struct ExecutionNodeConfig {
     pub validator_key: Option<B256>,
     /// Feed state handle for consensus RPC (if validator).
     pub feed_state: Option<FeedStateHandle>,
+    /// Skip MPT state-root computation in the engine and payload builder.
+    pub skip_state_root: bool,
     /// Share the engine's sparse trie pipeline with the payload builder.
     pub share_sparse_trie_with_payload_builder: bool,
 }
@@ -250,6 +252,7 @@ impl ExecutionNodeConfig {
             secret_key: B256::random(),
             validator_key: None,
             feed_state: None,
+            skip_state_root: false,
             share_sparse_trie_with_payload_builder: false,
         }
     }
@@ -866,6 +869,7 @@ pub async fn launch_execution_node<P: AsRef<Path>>(
         secret_key,
         validator_key,
         feed_state,
+        skip_state_root,
         share_sparse_trie_with_payload_builder,
     } = config;
     let node_config = NodeConfig::new(Arc::new(chain_spec))
@@ -891,6 +895,7 @@ pub async fn launch_execution_node<P: AsRef<Path>>(
             c.network.p2p_secret_key_hex = Some(secret_key);
             // Match Tempo's engine default for nodes launched by tests.
             c.engine.suppress_persistence_during_build = true;
+            c.debug.skip_state_root = skip_state_root;
             c.engine.share_sparse_trie_with_payload_builder =
                 share_sparse_trie_with_payload_builder;
             c

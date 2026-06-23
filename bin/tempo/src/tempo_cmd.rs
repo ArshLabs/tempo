@@ -1408,6 +1408,15 @@ mod tests {
         TempoSubcommand,
     >;
 
+    fn parse_cli<I, T>(args: I) -> Result<TempoCli, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        crate::defaults::init_defaults();
+        TempoCli::try_parse_from(args)
+    }
+
     const TEST_VALIDATOR_ADDRESS: &str = "0x0000000000000000000000000000000000000001";
     const TEST_FEE_RECIPIENT: &str = "0x0000000000000000000000000000000000000002";
     const TEST_PUBLIC_KEY: &str =
@@ -1418,7 +1427,7 @@ mod tests {
 
     #[test]
     fn parse_p2p_proxy_defaults() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "p2p-proxy",
             "--rpc-url",
@@ -1434,7 +1443,7 @@ mod tests {
 
     #[test]
     fn parse_p2p_proxy_all_args() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "p2p-proxy",
             "--rpc-url",
@@ -1464,13 +1473,13 @@ mod tests {
 
     #[test]
     fn parse_p2p_proxy_missing_rpc_url_fails() {
-        let result = TempoCli::try_parse_from(["tempo", "p2p-proxy"]);
+        let result = parse_cli(["tempo", "p2p-proxy"]);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_encrypt_signing_key() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             "encrypt-signing-key",
@@ -1512,7 +1521,7 @@ mod tests {
 
     #[track_caller]
     fn assert_parse_show_verification_key(command: &str) {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             command,
@@ -1548,7 +1557,7 @@ mod tests {
 
     #[test]
     fn parse_generate_signing_key_with_secret() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             "generate-signing-key",
@@ -1576,7 +1585,7 @@ mod tests {
 
     #[track_caller]
     fn assert_parse_generate_signing_key(command: &str) {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             command,
@@ -1596,7 +1605,7 @@ mod tests {
 
     #[test]
     fn parse_create_add_validator_signature_with_secret() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             "create-add-validator-signature",
@@ -1629,7 +1638,7 @@ mod tests {
 
     #[test]
     fn parse_create_rotate_validator_signature_with_secret() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             "create-rotate-validator-signature",
@@ -1660,7 +1669,7 @@ mod tests {
 
     #[test]
     fn parse_add_validator_with_signature_does_not_require_signing_key() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             "add-validator",
@@ -1690,7 +1699,7 @@ mod tests {
 
     #[test]
     fn parse_add_validator_rejects_signature_and_signing_key() {
-        let err = TempoCli::try_parse_from([
+        let err = parse_cli([
             "tempo",
             "consensus",
             "add-validator",
@@ -1716,7 +1725,7 @@ mod tests {
 
     #[test]
     fn parse_add_validator_with_consensus_signing_key_secret() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             "add-validator",
@@ -1750,7 +1759,7 @@ mod tests {
 
     #[test]
     fn parse_rotate_validator_with_consensus_signing_key_secret() {
-        let cli = TempoCli::try_parse_from([
+        let cli = parse_cli([
             "tempo",
             "consensus",
             "rotate-validator",
