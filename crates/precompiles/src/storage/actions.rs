@@ -53,6 +53,13 @@ impl StorageActions {
         self.actions.borrow_mut().clear();
     }
 
+    /// Clears recorded storage actions without releasing the backing allocation.
+    pub fn clear(&self) {
+        if self.enabled.get() {
+            self.actions.borrow_mut().clear();
+        }
+    }
+
     /// Replaces the recorded storage actions with an empty buffer, returning the previous actions.
     pub fn take(&self) -> Option<Vec<StorageAction>> {
         self.replace(Vec::new())
